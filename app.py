@@ -196,7 +196,7 @@ def extract_text_from_chunk(chunk) -> str:
 
     return ""
 
-@app.post("/chat/stream")
+@app.post("/stream")
 async def chat_stream(request: Request):
     try:
         data = await request.json()
