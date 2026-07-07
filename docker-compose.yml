@@ -1,0 +1,14 @@
+services:
+  chat-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+      - ./chroma_db:/app/chroma_db
+    restart: unless-stopped
