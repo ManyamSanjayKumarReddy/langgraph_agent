@@ -31,6 +31,8 @@ from database import (
 from rag import add_document_to_rag
 from tools import set_current_thread_id
 
+from starlette.concurrency import run_in_threadpool
+
 app = FastAPI()
 
 templates = Jinja2Templates(directory="templates")
@@ -269,6 +271,59 @@ async def chat_stream(request: Request):
         }
     )
 
+
+@app.post("/response")
+async def chat_response(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON Body"}, status_code=400)
+
+    user_message = data.get("message", "")
+    thread_id = data.get("thread_id", "default")
+    selected_model = data.get("model", "gemini-2.5-flash")
+
+    if not user_message.strip():
+        return JSONResponse(
+            {"error": "Message is required."},
+            status_code=400
+        )
+
+    agent = get_agent(selected_model)
+
+    create_or_update_conversation(thread_id, user_message)
+    save_chat_message(thread_id, "user", user_message)
+
+    set_current_thread_id(thread_id)
+
+    config = {
+        "configurable": {
+            "thread_id": thread_id
+        }
+    }
+
+    try:
+        inputs = {
+            "messages": [
+                HumanMessage(content=user_message)
+            ]
+        }
+
+        # agent.invoke is blocking, so run it off the event loop
+        result = await run_in_threadpool(agent.invoke, inputs, config=config)
+
+        final_message = result["messages"][-1]
+        final_answer = extract_text_from_chunk(final_message)
+
+        if final_answer.strip():
+            save_chat_message(thread_id, "assistant", final_answer)
+
+        return JSONResponse({"response": final_answer})
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    
+    
 if __name__ == "__main__":
     uvicorn.run(
         "app:app",
