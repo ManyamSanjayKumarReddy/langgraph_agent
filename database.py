@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from tortoise import Tortoise, fields
 from tortoise.models import Model
+from urllib.parse import urlparse
 
 _async_executor = ThreadPoolExecutor(max_workers=4)
 
@@ -19,8 +20,26 @@ def run_async(coro):
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
+def _parse_pg_credentials(url: str) -> dict:
+    parsed = urlparse(url)
+    return {
+        "host": parsed.hostname,
+        "port": parsed.port or 5432,
+        "user": parsed.username,
+        "password": parsed.password,
+        "database": parsed.path.lstrip("/"),
+        "minsize": 1,
+        "maxsize": 5,
+        "max_inactive_connection_lifetime": 60,
+    }
+
 TORTOISE_ORM = {
-    "connections": {"default": DATABASE_URL},
+    "connections": {
+        "default": {
+            "engine": "tortoise.backends.asyncpg",
+            "credentials": _parse_pg_credentials(DATABASE_URL),
+        }
+    },
     "apps": {
         "models": {
             "models": ["database", "aerich.models"],
@@ -28,7 +47,6 @@ TORTOISE_ORM = {
         }
     },
 }
-
 
 class Conversation(Model):
     id = fields.IntField(pk=True)
