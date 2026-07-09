@@ -18,7 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p uploads data
 RUN chmod +x entrypoint.sh
 
 EXPOSE 8003

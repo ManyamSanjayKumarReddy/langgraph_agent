@@ -9,10 +9,11 @@ langchain-google-genai
 langchain-core
 langgraph
 langchain-text-splitters
-langgraph-checkpoint-sqlite
+langgraph-checkpoint-postgres
 
-langchain-chroma
-chromadb
+langchain-postgres
+pgvector
+psycopg[binary,pool]
 pypdf
 docx2txt
 langchain-tavily

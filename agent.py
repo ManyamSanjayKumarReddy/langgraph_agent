@@ -1,7 +1,7 @@
 import os
-import sqlite3
-from pathlib import Path
 
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,11 +10,18 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.postgres import PostgresSaver
 from tools import tools
 
+_checkpoint_pool = ConnectionPool(
+    os.environ["DATABASE_URL"],
+    min_size=1,
+    max_size=10,
+    kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+)
 
-Path("data").mkdir(exist_ok=True)
+checkpointer = PostgresSaver(_checkpoint_pool)
+checkpointer.setup()
 
 ## allow sepecific models to be used
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -97,10 +104,6 @@ def build_agent(model_name:str):
     workflow.add_edge(START, "chatbot")
     workflow.add_conditional_edges("chatbot", tools_condition)
     workflow.add_edge("tools", "chatbot")
-    
-    conn = sqlite3.connect("data/langgraph_checkpoints.sqlite", check_same_thread=False)
-    
-    checkpointer = SqliteSaver(conn)
     
     return workflow.compile(checkpointer=checkpointer)
     

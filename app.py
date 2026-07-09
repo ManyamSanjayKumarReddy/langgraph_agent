@@ -4,7 +4,7 @@ import os
 load_dotenv()
 
 import json
-import uuid
+import tempfile
 from pathlib import Path
 
 import uvicorn
@@ -48,9 +48,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 templates = Jinja2Templates(directory="templates")
-
-Path("uploads").mkdir(exist_ok=True)
-Path("data").mkdir(exist_ok=True)
 
 
 @app.get("/")
@@ -113,21 +110,21 @@ async def upload_document(
                 }, status_code=400
             )
             
-        file_id = str(uuid.uuid4())
-        
-        safe_filename = filename.replace(" ", "_")
-        file_path = f"uploads/{file_id}_{safe_filename}"
-        
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
-            
-        await create_or_update_conversation(thread_id, "Uploaded document")
-        
-        result = add_document_to_rag(
-            file_path=file_path,
-            thread_id=thread_id
-        )
-        
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+
+        try:
+            await create_or_update_conversation(thread_id, "Uploaded document")
+
+            result = add_document_to_rag(
+                file_path=tmp_path,
+                thread_id=thread_id,
+                display_name=filename
+            )
+        finally:
+            os.remove(tmp_path)
+
         return JSONResponse({
             "success": True,
             "message": f"Uploaded {result['filename']} and created {result['chunks']} chunks"

@@ -1,45 +1,27 @@
 import asyncio
 import os
-from concurrent.futures import ThreadPoolExecutor
 
 from tortoise import Tortoise, fields
 from tortoise.models import Model
-from urllib.parse import urlparse
 
-_async_executor = ThreadPoolExecutor(max_workers=4)
+# The Tortoise/asyncpg connection pool is bound to the event loop active when
+# init_db() ran (FastAPI's main loop). Sync callers (tool functions, sync
+# generators run in a worker thread) must schedule their DB coroutine onto
+# that same loop rather than spinning up a new one, or asyncpg errors with
+# "another operation is in progress" / closed-connection errors.
+_loop: asyncio.AbstractEventLoop | None = None
 
 
 def run_async(coro):
-    """Run an async coroutine from sync code, whether or not a loop is already running."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
+    """Run an async DB coroutine from sync code, on the loop owning the connection pool."""
+    if _loop is None:
         return asyncio.run(coro)
-    else:
-        return _async_executor.submit(asyncio.run, coro).result()
+    return asyncio.run_coroutine_threadsafe(coro, _loop).result()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-def _parse_pg_credentials(url: str) -> dict:
-    parsed = urlparse(url)
-    return {
-        "host": parsed.hostname,
-        "port": parsed.port or 5432,
-        "user": parsed.username,
-        "password": parsed.password,
-        "database": parsed.path.lstrip("/"),
-        "minsize": 1,
-        "maxsize": 5,
-        "max_inactive_connection_lifetime": 60,
-    }
-
 TORTOISE_ORM = {
-    "connections": {
-        "default": {
-            "engine": "tortoise.backends.asyncpg",
-            "credentials": _parse_pg_credentials(DATABASE_URL),
-        }
-    },
+    "connections": {"default": DATABASE_URL},
     "apps": {
         "models": {
             "models": ["database", "aerich.models"],
@@ -82,6 +64,8 @@ class LongTermMemory(Model):
 
 async def init_db():
     # Schema is managed by Aerich migrations (see migrations/), not generated here.
+    global _loop
+    _loop = asyncio.get_running_loop()
     await Tortoise.init(config=TORTOISE_ORM)
 
 
