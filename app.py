@@ -19,13 +19,17 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from contextlib import asynccontextmanager
+
 from agent import get_agent
 from database import (
     init_db,
+    close_db,
     save_chat_message,
     get_chat_history,
     create_or_update_conversation,
     list_conversations,
+    run_async,
 )
 
 from rag import add_document_to_rag
@@ -33,14 +37,20 @@ from tools import set_current_thread_id
 
 from starlette.concurrency import run_in_threadpool
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+    await close_db()
+
+
+app = FastAPI(lifespan=lifespan)
 
 templates = Jinja2Templates(directory="templates")
 
 Path("uploads").mkdir(exist_ok=True)
 Path("data").mkdir(exist_ok=True)
-
-init_db()
 
 
 @app.get("/")
@@ -53,7 +63,7 @@ async def home(request: Request):
 
 @app.get("/conversations")
 async def conversations():
-    items = list_conversations()
+    items = await list_conversations()
     
     return {
         "conversations": [
@@ -70,7 +80,7 @@ async def conversations():
 
 @app.get("/history/{thread_id}")
 async def history(thread_id:str):
-    messages = get_chat_history(thread_id)
+    messages = await get_chat_history(thread_id)
     
     return {
         "messages": [
@@ -111,7 +121,7 @@ async def upload_document(
         with open(file_path, "wb") as f:
             f.write(await file.read())
             
-        create_or_update_conversation(thread_id, "Uploaded document")
+        await create_or_update_conversation(thread_id, "Uploaded document")
         
         result = add_document_to_rag(
             file_path=file_path,
@@ -217,8 +227,8 @@ async def chat_stream(request: Request):
     
     agent = get_agent(selected_model)
     
-    create_or_update_conversation(thread_id, user_message)
-    save_chat_message(thread_id, "user", user_message)
+    await create_or_update_conversation(thread_id, user_message)
+    await save_chat_message(thread_id, "user", user_message)
     
     set_current_thread_id(thread_id)
     
@@ -253,7 +263,7 @@ async def chat_stream(request: Request):
                     yield sse_data({"token": token})
             
             if final_answer.strip():
-                save_chat_message(thread_id, "assistant", final_answer)
+                run_async(save_chat_message(thread_id, "assistant", final_answer))
                 
             yield sse_data({"done" : True})
             

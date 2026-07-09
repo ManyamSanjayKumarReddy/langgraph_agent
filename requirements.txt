@@ -17,4 +17,7 @@ pypdf
 docx2txt
 langchain-tavily
 tavily-python
-sqlalchemy
+
+tortoise-orm
+asyncpg
+aerich

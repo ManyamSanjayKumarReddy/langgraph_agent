@@ -5,7 +5,7 @@ load_dotenv()
 
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
-from database import save_memory, search_memory
+from database import save_memory, search_memory, run_async
 from rag import retrieve_from_rag
 
 
@@ -49,19 +49,19 @@ def remember_this(memory:str) -> str:
     use this when user asks you to remember something
     """
     
-    return save_memory(
+    return run_async(save_memory(
         thread_id=CURRENT_THREAD_ID,
         memory=memory
-    )
+    ))
     
 @tool
 def recall_memory(query: str) -> str:
     """ Recall saved long term memories about the user or this conversation"""
     
-    return search_memory(
+    return run_async(search_memory(
         thread_id=CURRENT_THREAD_ID,
         query=query
-    )
+    ))
     
 @tool
 def search_uploaded_documents(query:str) -> str:

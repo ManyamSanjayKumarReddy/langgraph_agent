@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chatagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chatagent}
+      POSTGRES_DB: ${POSTGRES_DB:-chatagent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chatagent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   chat-agent:
     build:
       context: .
@@ -7,8 +24,14 @@ services:
       - "8003:8003"
     env_file:
       - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./uploads:/app/uploads
       - ./data:/app/data
       - ./chroma_db:/app/chroma_db
     restart: unless-stopped
+
+volumes:
+  postgres_data:
