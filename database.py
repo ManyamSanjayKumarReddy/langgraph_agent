@@ -20,8 +20,16 @@ def run_async(coro):
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
+# Tortoise's URL parser only recognizes the "postgres" scheme, not the
+# equally-standard "postgresql" scheme that most tools/providers hand out.
+_TORTOISE_DATABASE_URL = (
+    "postgres://" + DATABASE_URL.split("://", 1)[1]
+    if DATABASE_URL.startswith("postgresql://")
+    else DATABASE_URL
+)
+
 TORTOISE_ORM = {
-    "connections": {"default": DATABASE_URL},
+    "connections": {"default": _TORTOISE_DATABASE_URL},
     "apps": {
         "models": {
             "models": ["database", "aerich.models"],
